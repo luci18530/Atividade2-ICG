@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atividade 2 - ICG</title>
+
+    <style> 
+        body {
+            background-color: #000000;
+        }
+    </style>
+
+</head>
+<body>
+    <canvas id="canvas" width="128" height="128" style="border: 1px solid gray; width: 512px; height: 512px; image-rendering: pixelated; position: absolute; top:20px; left: 16px;"></canvas>
+
+</body>
+</html>
+
+   
+<script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.js"></script>
+
+<script>
+	// Luciano Pereira (20190018530) & Abraão Homualdo (20200095558)
+    class Canvas {
+        constructor(canvas) {
+            this.canvas = document.getElementById("canvas");
+            this.context = this.canvas.getContext("2d");
+            this.clear_color = 'rgba(0,0,0,255)';
+        }
+
+    clear() {
+        this.context.fillStyle = this.clear_color;
+        this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+
+    putPixel(x, y, color) {
+        this.context.fillStyle = 'rgb(' + color[0] + ',' + color[1] + ',' + color[2] + ')';
+        this.context.fillRect(x, (this.canvas.height - 1) - y, 1, 1);
+        }
+    }
+
+    class Pixel {
+        constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        }
+    }
+
+    // https://threejs.org/docs/#api/en/math/Vector3   
+    let color_buffer = new Canvas("canvas");
+    color_buffer.clear();
+
+/******************************************************************************
+ * Piramide
+ *****************************************************************************/
+//                                   X     Y     Z    W (coord. homogênea)
+    let vertices = [new THREE.Vector4( 1,  0,  0, 1.0),
+                    new THREE.Vector4( 0,  0, -1, 1.0),
+                    new THREE.Vector4(-1,  0,  0, 1.0),
+                    new THREE.Vector4( 0,  0,  1, 1.0),
+                    new THREE.Vector4( 0, 0.85, 0, 1.0),
+                    new THREE.Vector4( 0,  0,  0, 1.0),
+                    new THREE.Vector4( 0,  0,  0, 1.0),
+                    new THREE.Vector4( 0,  0,  0, 1.0),
+
+                ];
+
+/******************************************************************************
+ * As arestas da Piramide
+ *****************************************************************************/
+    let edges = [[0,1],
+                [2,1],
+                [3,2],
+                [0,3],
+
+                [3,4],
+                [0,4],
+                [1,4],
+                [2,4],
+                ];
+                
+/******************************************************************************
+ * Matriz Model (modelagem): Esp. Objeto --> Esp. Universo. 
+ * OBS: A matriz está carregada inicialmente com a identidade.
+ *****************************************************************************/
+    let m_model = new THREE.Matrix4();
+
+    m_model.set(1.0, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0);
+
+    for (let i = 0; i < vertices.length; i++) {
+        vertices[i].applyMatrix4(m_model);
+    }
+
+    function Matriz_escala(sx, sy, sz) { //Transformação de escala
+
+        let m_escala = new THREE.Matrix4(); // Matriz de transformação que vai ser retornada
+
+        m_escala.set(sx , 0.0, 0.0, 0.0,
+                     0.0, sy , 0.0, 0.0,
+                     0.0, 0.0, sz , 0.0,
+                     0.0, 0.0, 0.0, 1.0);
+
+        return m_escala;
+    }
+
+    function Matriz_shear(shx, shy, shz) { //Shear
+
+        let m_shear = new THREE.Matrix4(); // Matriz de transformação que vai ser retornada
+
+        m_shear.set(1.0, shy, shz, 0.0,
+                    shx, 1.0, shz, 0.0,
+                    shx, shy, 1.0, 0.0,
+                    0.0, 0.0, 0.0, 1.0);
+
+        return m_shear;
+    }
+
+    function Matriz_translacao(tx, ty, tz) { //Translation
+
+        let m_translacao = new THREE.Matrix4(); // Matriz de transformação que vai ser retornada
+
+        m_translacao.set(1.0, 0.0, 0.0,  tx,
+                         0.0, 1.0, 0.0,  ty,
+                         0.0, 0.0, 1.0,  tz,
+                         0.0, 0.0, 0.0, 1.0);
+
+        return m_translacao;
+    }
+
+
+    function Matriz_rotacao(eixo, angulo) {
+
+        let radiano = angulo * Math.PI / 180.0;
+
+        let cos = Math.cos(radiano);
+        let sen = Math.sin(radiano);
+
+        let m_rotacao = new THREE.Matrix4();
+
+        if (eixo == 'X' || eixo == 'x') {
+            m_rotacao.set(1.0, 0.0, 0.0, 0.0,
+                          0.0, cos,-sen, 0.0,
+                          0.0, sen, cos, 0.0,
+                          0.0, 0.0, 0.0, 1.0);
+
+        } else if (eixo == 'Y' || eixo == 'y') {
+            m_rotacao.set(cos, 0.0, sen, 0.0,
+                          0.0, 1.0, 0.0, 0.0, 
+                         -sen, 0.0, cos, 0.0,
+                          0.0, 0.0, 0.0, 1.0);
+
+        } else if (eixo == 'Z' || eixo == 'z') {
+            m_rotacao.set(cos,-sen, 0.0, 0.0,
+                          sen, cos, 0.0, 0.0,
+                          0.0, 0.0, 1.0, 0.0,
+                          0.0, 0.0, 0.0, 1.0);
+        }
+
+        return m_rotacao;
+
+    }
+
+    function Matriz_identidade() {
+    // Matriz identidade
+    let m_identidade = new THREE.Matrix4();
+
+    m_identidade.set(1.0, 0.0, 0.0, 0.0,
+                     0.0, 1.0, 0.0, 0.0,
+                     0.0, 0.0, 1.0, 0.0,
+                     0.0, 0.0, 0.0, 1.0);
+
+    return m_identidade;
+}
+
+
+    /******************************************************************************
+     * Parâmetros da camera sintética.
+     *****************************************************************************/
+    let cam_pos = new THREE.Vector3(1.6,1.4,1);     // posição da câmera no esp. do Universo.
+    let cam_look_at = new THREE.Vector3(0.0,0.0,0.0); // ponto para o qual a câmera aponta.
+    let cam_up = new THREE.Vector3(0.0,1.0,0.0);      // vetor Up da câmera.
+    
+
+    /******************************************************************************
+     * Matriz View (visualização): Esp. Universo --> Esp. Câmera
+     * OBS: A matriz está carregada inicialmente com a identidade. 
+     *****************************************************************************/
+
+    // Derivar os vetores da base da câmera a partir dos parâmetros informados acima.
+
+    let direcao = new THREE.Vector3();
+    let x_cam = new THREE.Vector3();
+    let y_cam = new THREE.Vector3();
+    let z_cam = new THREE.Vector3();
+
+    direcao.subVectors(cam_look_at, cam_pos);
+
+    //ZCAM = - D / |D|
+    z_cam = direcao.normalize();
+    z_cam = z_cam.negate();
+
+    x_cam = x_cam.crossVectors(cam_up, z_cam).normalize();
+    y_cam = y_cam.crossVectors(z_cam, x_cam).normalize();
+
+
+    // Construir 'm_bt', a inversa da matriz de base da câmera.
+
+    // ---------- implementar aqui ----------------------------------------------
+    let m_bt = new THREE.Matrix4();
+
+    m_bt.set(x_cam.x, x_cam.y, x_cam.z, 0.0,
+             y_cam.x, y_cam.y, y_cam.z, 0.0,
+             z_cam.x, z_cam.y, z_cam.z, 0.0,
+             0.0, 0.0, 0.0, 1.0);
+
+    // Construir a matriz 'm_t' de translação para tratar os casos em que as
+    // origens do espaço do universo e da câmera não coincidem.
+
+    // ---------- implementar aqui ----------------------------------------------
+    let m_t = new THREE.Matrix4();
+
+    m_t.set(1.0, 0.0, 0.0, -cam_pos.x,
+            0.0, 1.0, 0.0, -cam_pos.y,
+            0.0, 0.0, 1.0, -cam_pos.z,
+            0.0, 0.0, 0.0, 1.0);
+
+    // Constrói a matriz de visualização 'm_view' como o produto
+    //  de 'm_bt' e 'm_t'.
+    let m_view = m_bt.clone().multiply(m_t);
+
+    for (let i = 0; i < vertices.length; ++i)
+        vertices[i].applyMatrix4(m_view);
+
+    /******************************************************************************
+     * Matriz de Projecao: Esp. Câmera --> Esp. Recorte
+     * OBS: A matriz está carregada inicialmente com a identidade. 
+     *****************************************************************************/
+
+    
+    let m_projection = new THREE.Matrix4();
+    let d = 1.0
+
+    m_projection.set(1.0, 0.0, 0.0, 0.0,
+                     0.0, 1.0, 0.0, 0.0,
+                     0.0, 0.0, 1.0, d,
+                     0.0, 0.0, -1/d, 1.0);
+
+    for (let i = 0; i < vertices.length; ++i)
+        vertices[i].applyMatrix4(m_projection);
+
+    /******************************************************************************
+     * Homogeneizacao (divisao por W): Esp. Recorte --> Esp. Canônico
+     *****************************************************************************/
+
+    for (let i = 0; i < vertices.length; ++i) {
+        vertices[i].divideScalar(vertices[i].w);
+    }
+
+    /******************************************************************************
+     * Matriz Viewport: Esp. Canônico --> Esp. Tela
+     * OBS: A matriz está carregada inicialmente com a identidade. 
+     *****************************************************************************/
+
+    let w = 128;
+    let h = 128;
+
+    let escala = new THREE.Matrix4()
+    escala = Matriz_escala(w/ 2, h/ 2, 1.0); //escala a matriz proporcionalmente com a resolucao
+    let translacao = new THREE.Matrix4();
+    translacao = Matriz_translacao(1.0, 1.0, 0.0);
+
+    let m_viewport = new THREE.Matrix4();
+
+    m_viewport.set( 1.0, 0.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0, 0.0,
+                    0.0, 0.0, 1.0, 0.0,
+                    0.0, 0.0, 0.0, 1.0);
+
+    m_viewport = m_viewport.multiply(escala);
+    m_viewport = m_viewport.multiply(translacao);                
+
+    for (let i = 0; i < vertices.length; ++i)
+        vertices[i].applyMatrix4(m_viewport);
+
+    /******************************************************************************
+     * Rasterização
+     *****************************************************************************/
+
+    // ---------- implementar aqui ----------------------------------------------
+
+    //color_buffer.putPixel(vertices[6].x, vertices[6].y, [255,0,0]);     
+
+    function MidPointLineAlgorithm(x0, y0, x1, y1, color_0, color_1) {
+        let dx = x1 - x0;
+        let dy = y1 - y0;
+        let color = color_0;
+        
+
+        let dxabs = Math.abs(dx);
+        let dyabs = Math.abs(dy);
+        
+        // Calcular os intervalos de erro para ambos os eixos
+        errintervalX = 2*dyabs - dxabs;
+        errintervalY = 2*dxabs - dyabs;
+
+        let x;
+        let y;
+        let xfim;
+        let yfim;
+        
+        
+        // A linha é dominante no eixo X
+        if(dyabs <= dxabs){
+            var dred = (color_1[0] - color_0[0]) / dx;
+            var dgreen = (color_1[1] - color_0[1]) / dx;
+            var dblue = (color_1[2] - color_0[2]) / dx;
+            // A linha é desenhada da esquerda para a direita
+            if (dx >= 0){
+                x = x0;
+                y = y0;
+                xfim = x1;
+
+            }
+            // A linha é desenhada da direita para a esquerda
+            else {
+                x = x1;
+                y = y1;
+                xfim = x0;
+            }
+        
+
+        
+        // Rasterizar a linha
+        for (let index = 0; x < xfim; index++) {
+            
+
+            if (dx >= 0){
+                color[0] = color[0] + dred; 
+                color[1] = color[1] + dgreen; 
+                color[2] = color[2] + dblue;
+            }
+            
+            else {
+                color[0] = color[0] - dred; 
+                color[1] = color[1] - dgreen; 
+                color[2] = color[2] - dblue;
+            }
+
+            // Lidar com octantes ...
+            if (errintervalX < 0){
+                errintervalX = errintervalX + 2 *  dyabs;
+            }
+
+            else {
+                if ((dx < 0 && dy < 0) || (dx > 0 && dy > 0)) {
+                    y++;
+                }
+
+                else {
+                    y--;
+                }
+
+                errintervalX = errintervalX + 2 * (dyabs - dxabs);
+            }
+
+            color_buffer.putPixel(x, y, color);
+            x++; 
+            }    
+
+        
+        }
+        
+        // A linha é dominante no eixo Y
+        else {
+            var dred = (color_1[0] - color_0[0]) / dy;
+            var dgreen = (color_1[1] - color_0[1]) / dy;
+            var dblue = (color_1[2] - color_0[2]) / dy;
+            // A linha é desenhada de baixo para cima
+            if (dy >= 0){
+                x = x0;
+                y = y0;
+                yfim = y1;
+            }
+            // A linha é desenhada de cima para baixo
+            else {
+                x = x1;
+                y = y1;
+                yfim = y0;
+            }
+
+            
+
+            // Rasterizar a linha
+            for (let index = 0; y < yfim; index++){
+                
+                if (dy >= 0){
+                color[0] = color[0] + dred; 
+                color[1] = color[1] + dgreen; 
+                color[2] = color[2] + dblue;
+                }
+            
+                else {
+                color[0] = color[0] - dred; 
+                color[1] = color[1] - dgreen; 
+                color[2] = color[2] - dblue;
+                }
+
+
+                // Lidar com octantes ...
+                if (errintervalY <= 0){
+                    errintervalY = errintervalY + 2 * dxabs;
+                }
+                
+                else {
+                    if((dx < 0 && dy < 0) || (dy > 0 && dy > 0)){
+                        x++;
+                    }
+                    else {
+                        x--;
+                    }
+
+                    errintervalY = errintervalY + 2 * (dxabs - dyabs)
+
+
+                    }
+
+                    color_buffer.putPixel(x, y, color);
+                    y++;
+                }
+
+
+
+            }
+
+            
+        }
+            
+    
+    
+    //MidPointLineAlgorithm(25, 30, 100,80, [255,0,0,255], [255,255,0,255])
+
+    function DrawTriangle(x0, y0, x1, y1, x2, y2, color_0, color_1, color_2) {
+        MidPointLineAlgorithm(x0, y0, x1, y1, color_0, color_1);
+
+        MidPointLineAlgorithm(x1, y1, x2, y2, color_1, color_2);
+
+        MidPointLineAlgorithm(x2, y2, x0, y0, color_2, color_0); 
+}
+
+color = [255, 0, 0, 0]; // vermelho
+for (let i = 0; i < vertices.length; ++i) {
+    MidPointLineAlgorithm(vertices[edges[i][1]].x, vertices[edges[i][1]].y, vertices[edges[i][0]].x, vertices[edges[i][0]].y, color, color);
+}
+   // DrawTriangle();
+</script>

@@ -209,13 +209,15 @@
     z_cam = direcao.normalize();
     z_cam = z_cam.negate();
 
+
+    // XCAM = (U X ZCAM) / |U X ZCAM|
     x_cam = x_cam.crossVectors(cam_up, z_cam).normalize();
+    // YCAM = (ZCAM X XCAM) / |ZCAM X XCAM|
     y_cam = y_cam.crossVectors(z_cam, x_cam).normalize();
 
 
     // Construir 'm_bt', a inversa da matriz de base da câmera.
 
-    // ---------- implementar aqui ----------------------------------------------
     let m_bt = new THREE.Matrix4();
 
     m_bt.set(x_cam.x, x_cam.y, x_cam.z, 0.0,
@@ -226,7 +228,6 @@
     // Construir a matriz 'm_t' de translação para tratar os casos em que as
     // origens do espaço do universo e da câmera não coincidem.
 
-    // ---------- implementar aqui ----------------------------------------------
     let m_t = new THREE.Matrix4();
 
     m_t.set(1.0, 0.0, 0.0, -cam_pos.x,
@@ -271,8 +272,8 @@
      * OBS: A matriz está carregada inicialmente com a identidade. 
      *****************************************************************************/
 
-    let w = 128;
-    let h = 128;
+    let w = 128; // largura
+    let h = 128; // altura
 
     let escala = new THREE.Matrix4()
     escala = Matriz_escala(w/ 2, h/ 2, 1.0); //escala a matriz proporcionalmente com a resolucao
@@ -286,6 +287,7 @@
                     0.0, 0.0, 1.0, 0.0,
                     0.0, 0.0, 0.0, 1.0);
 
+    // M.viewport = M.escala * M.translação
     m_viewport = m_viewport.multiply(escala);
     m_viewport = m_viewport.multiply(translacao);                
 
